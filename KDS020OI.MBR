@@ -1,0 +1,549 @@
+        ctl-opt option(*nodebugio:*srcstmt:*nounref) dftactgrp(*no);                                
+        ctl-opt BNDDIR('QC2LE':'HTTPAPI':'YAJL':'PROCEDURES');                                      
+        /include yajl/qrpglesrc,yajl_h                                                              
+        /copy edilib/qprcsrc,rithum_h                                                               
+        /include maputil/qprcsrc,getguidcp                                                          
+      *===================================================                                          
+      * 20241205 - AShrader - Creation!                                                             
+      * 20250108 - AShrader - Update mailbox 'M' status for any fetched PO's                        
+      * 20250121 - AShrader - Email alert when files don't get written.                             
+      * 20250204 - AShrader - use dscoShipLateDate                                                  
+      * 20250326 - AShrader - stop outputting KDS user files until we figure out                    
+      *                       why the api is fetching po's late.                                    
+      * 20250822 - AShrader - Output KDS user files.                                                
+      * 20250922 - AShrader - monitor for error on token call.                                      
+      *===================================================                                          
+        dcl-f rtm_tkn usage(*input) keyed usropn;                                                   
+      *===================================================                                          
+        dcl-s i int(5);                                                                             
+        dcl-s ii int(10);                                                                           
+        dcl-s iii int(10);                                                                          
+        dcl-s iv int(10);                                                                           
+        dcl-s tDte char(10);                                                                        
+        dcl-s fDte char(10);                                                                        
+        dcl-s beg03 char(22);                                                                       
+        dcl-s beg05 zoned(8:0);                                                                     
+        dcl-s masterGuid char(36);                                                                  
+        dcl-s guid char(36);                                                                        
+        dcl-s tmstp timestamp;                                                                      
+        dcl-s tmstp2 timestamp;                                                                     
+        dcl-s tmstp3 timestamp;                                                                     
+        dcl-s tim char(26);                                                                         
+        dcl-s tim2 char(26);                                                                        
+        dcl-s tim3 char(26);                                                                        
+        dcl-s num zoned(6:0);                                                                       
+        dcl-s err ind;                                                                              
+        dcl-s msg varchar(32740);                                                                   
+      *===================================================                                          
+          dcl-ds ordo likeds(ord.orders);                                                           
+                                                                                                    
+          dcl-ds billTo2 qualified;                                                                 
+                address1 char(35);                                                                  
+                address2 char(35);                                                                  
+                address3 char(35);                                                                  
+                address char(35) dim(3);                                                            
+                city char(20);                                                                      
+                country char(5);                                                                    
+                email char(50);                                                                     
+                firstName char(20);                                                                 
+                lastName char(20);                                                                  
+                name char(30);                                                                      
+                postal char(10);                                                                    
+                region char(5);                                                                     
+                state char(2);                                                                      
+          end-ds;                                                                                   
+          dcl-ds coupons2 qualified;                                                                
+                amount zoned(5:2);                                                                  
+                percentage zoned(5:3);                                                              
+          end-ds;                                                                                   
+          dcl-ds payments2 qualified;                                                               
+                cardLastFour char(4);                                                               
+                cardType char(25);                                                                  
+          end-ds;                                                                                   
+          dcl-ds shipping2 qualified;                                                               
+                  address1 char(35);                                                                
+                  address2 char(35);                                                                
+                  address3 char(35);                                                                
+                  address char(80) dim(3);                                                          
+                  city char(25);                                                                    
+                  country char(5);                                                                  
+                  email char(50);                                                                   
+                  firstName char(30);                                                               
+                  lastName char(30);                                                                
+                  name char(30);                                                                    
+                  postal char(10);                                                                  
+                  region char(5);                                                                   
+                  state char(2);                                                                    
+          end-ds;                                                                                   
+          dcl-ds taxes2 qualified;                                                                  
+                  percentage zoned(5:2) inz;                                                        
+                  typeCode char(5) inz;                                                             
+          end-ds;                                                                                   
+          dcl-ds lineItems2 qualified;                                                              
+                rejectedQuantity zoned(3:0);                                                        
+                color char(25);                                                                     
+                warehouseCode char(5);                                                              
+                acceptedQuantity zoned(3:0);                                                        
+                title char(50);                                                                     
+                expectedCost zoned(5:2);                                                            
+                lineNumber zoned(3:0);                                                              
+                productGroup char(20);                                                              
+                sku char(20);                                                                       
+                quantity zoned(3:0);                                                                
+                giftFlag ind;                                                                       
+                receiptId char(36);                                                                 
+                upc char(12);                                                                       
+                consumerPrice zoned(5:2);                                                           
+                size char(25);                                                                      
+                partnerSku char(15);                                                                
+                cancelledQuantity zoned(3:0);                                                       
+                bogoFlag ind;                                                                       
+                dscoItemId char(15);                                                                
+                giftMessage char(80);                                                               
+           end-ds;                                                                                  
+                                                                                                    
+          dcl-ds ord qualified;                                                                     
+            scrollId char(350);                                                                     
+            dcl-ds orders dim(500);                                                                 
+                dcl-ds billTo likeds(billTo2);                                                      
+              consumerOrderNumber char(30);                                                         
+                dcl-ds coupons likeds(coupons2) dim(7) inz;                                         
+              giftFlag ind;                                                                         
+              orderType char(15);                                                                   
+                dcl-ds payments likeds(payments2) dim(5);                                           
+              poNumber char(22);                                                                    
+              receiptId char(34);                                                                   
+              requestedShipCarrier char(5);                                                         
+              requestShipMethod char(15);                                                           
+              requestedShippingServicelLevelCode char(10);                                          
+              requestedShippingServiceLevelCodeUnmapped char(10);                                   
+              requestedWarehouseCode char(5);                                                       
+              requestedWarehouseDscoId char(25);                                                    
+              requestedWarehouseRetailerCode char(25);                                              
+              retailerCreateDate char(26);                                                          
+              shipCarrier char(15);                                                                 
+              shipMethod char(20);                                                                  
+              shipWarehouseCode char(5);                                                            
+              shipWarehouseDscoId char(25);                                                         
+              shipWarehouseRetailerCode char(25);                                                   
+                dcl-ds shipping likeds(shipping2);                                                  
+              signatureRequiredFlag ind;                                                            
+                dcl-ds taxes likeds(taxes2) dim(5) inz;                                             
+              testFlag ind;                                                                         
+              dscoCreateDate char(26);                                                              
+              expectedDeliveryDate char(26);                                                        
+                dcl-ds lineItems likeds(lineItems2) dim(50) inz;                                    
+              dscoLastUpdate char(26);                                                              
+              dscoLifecycle char(15);                                                               
+              dscoShipLateDate char(26);                                                            
+              shippingServiceLevelCode char(10);                                                    
+              dscoStatus char(15);                                                                  
+              dscoOrderId char(22);                                                                 
+            end-ds;                                                                                 
+          end-ds;                                                                                   
+                                                                                                    
+         dcl-ds errDs qualified dim(500);                                                           
+           po char(22);                                                                             
+           sqlcod int(5);                                                                           
+           file varchar(10);                                                                        
+           msg varchar(32740);                                                                      
+         end-ds;                                                                                    
+      *===================================================                                          
+        dcl-pr report_error extpgm('KDS020AI');                                                     
+          *n likeds(errDs) dim(500);                                                                
+        end-pr;                                                                                     
+                                                                                                    
+        dcl-pr bldJson extpgm('KDS020JI');                                                          
+          *n char(15);                                                                              
+          *n char(22);                                                                              
+        end-pr;                                                                                     
+        dcl-s func char(15) inz('getOrders');                                                       
+        dcl-s po char(22);                                                                          
+        dcl-s logCount int(3) inz(1);                                                               
+      *===================================================                                          
+      /Free                                                                                         
+       //    tDte = %char(%date() + %days(1));                                                      
+       //    fDte = %char(%date() + %days(-3));                                                     
+          fDte = '2026-01-24';                                                                      
+          tDte = '2026-01-27';                                                                      
+                                                                                                    
+           ctl(1).EP = %scanRpl('{fDte}':fDte:ctl(1).EP);                                           
+           ctl(1).EP = %scanRpl('{tDte}':tDte:ctl(1).EP);                                           
+           URL = host + %trim(ctl(1).EP);                                                           
+       //      http_setDebugLevel(2);                                                               
+       //      http_debug(*on:'/home/as5289/zipper/oTst' +                                          
+       //         %char(logCount) + '.txt');                                                        
+             If rqst(ctl(1).method) = ctl(1).rtn;                                                   
+               Exsr ord_Response;                                                                   
+             Endif;                                                                                 
+             Dow ord.scrollId <> *blanks;                                                           
+               URL = host + %trim(ctl(2).EP) + ord.scrollId;                                        
+               clear ord;                                                                           
+               logCount += 1;                                                                       
+       //        http_setDebugLevel(2);                                                             
+       //        http_debug(*on:'/home/as5289/zipper/oTst' +                                        
+       //         %char(logCount) + '.txt');                                                        
+               If rqst(ctl(2).method) = ctl(2).rtn;                                                 
+                 Exsr ord_Response;                                                                 
+               Endif;                                                                               
+             Enddo;                                                                                 
+         //AJS - 2025-03-26                                                                         
+         //AJS - 2025-08-22 REMOVED                                                                 
+       //If 1 = 2;                                                                                  
+           //process order acknoledgements                                                          
+             i = *zero;                                                                             
+             Exec Sql                                                                               
+              Select count(*)                                                                       
+                into :i                                                                             
+              From edi850mst                                                                        
+              Where cust# = 53                                                                      
+              And arqstid = 0;                                                                      
+              If i > *zero;                                                                         
+                func = 'ackBatch';                                                                  
+                bldJson(func:po);                                                                   
+              Endif;                                                                                
+       //    clean up mailbox                                                                       
+           Exec Sql                                                                                 
+            update edmast                                                                           
+              set emsts = 'M'                                                                       
+            Where emptnr = 'KOLDSCO'                                                                
+            And emsts = 'T'                                                                         
+            And emlink in                                                                           
+               (Select beg03 from kdsh1850);                                                        
+                                                                                                    
+            If errDs(1).po <> *blanks;                                                              
+              report_error(errDs);                                                                  
+            Endif;                                                                                  
+       //Endif;                                                                                     
+         *inlr = *on;                                                                               
+         return;                                                                                    
+      /End-Free                                                                                     
+     *****************************************************                                          
+       Begsr *inzsr;                                                                                
+        open rtm_tkn;                                                                               
+           chain ('RITHUM1':'r1_tkn1.txt') rtm_tkn;                                                 
+             If %found(rtm_tkn);                                                                    
+               monitor;                                                                             
+                 tkn = get_token(clientId:cliSecr:num);                                             
+               on-error;                                                                            
+                 close rtm_tkn;                                                                     
+                  *inlr = *on;                                                                      
+                  return;                                                                           
+               endmon;                                                                              
+             Endif;                                                                                 
+         close rtm_tkn;                                                                             
+         load_ctl();                                                                                
+       Endsr;                                                                                       
+     *****************************************************                                          
+       Begsr ord_Response;                                                                          
+          Data-Into ord %DATA(response:                                                             
+          'allowmissing=yes allowextra=yes case=convert countprefix=num_')                          
+            %PARSER('YAJLINTO');                                                                    
+         for i = 1 to %elem(ord.orders);                                                            
+            If ord.orders(i).poNumber = *blanks;                                                    
+              leave;                                                                                
+            Endif;                                                                                  
+            err = *off;                                                                             
+            beg03 = ord.orders(i).poNumber;                                                         
+            beg05 = %dec(%subst(ord.orders(i).dscoCreateDate:1:4) +                                 
+                         %subst(ord.orders(i).dscoCreateDate:6:2) +                                 
+                         %subst(ord.orders(i).dscoCreateDate:9:2):8:0);                             
+            clear shipping2;                                                                        
+            clear billTo2;                                                                          
+            clear taxes2;                                                                           
+            clear payments2;                                                                        
+            clear ordo;                                                                             
+            shipping2 = ord.orders(i).shipping;                                                     
+            billTo2 = ord.orders(i).billTo;                                                         
+            taxes2 = ord.orders(i).taxes(1);                                                        
+            payments2 = ord.orders(i).payments(1);                                                  
+            ordo = ord.orders(i);                                                                   
+            tim = ord.orders(i).dscoCreateDate;                                                     
+                                                                                                    
+                 Exec Sql                                                                           
+                  Select cast(substr(:tim,1,10)||'-'||                                              
+                              substr(:tim,12,2)||'.'||                                              
+                              substr(:tim,15,2)||'.'||                                              
+                              substr(:tim,18,2)||'.'||                                              
+                              '000000' as timestamp)                                                
+                     into :tmstp3                                                                   
+                  From sysibm.sysdummy1;                                                            
+                                                                                                    
+                 tim = ord.orders(i).expectedDeliveryDate;                                          
+                 tim2 = ord.orders(i).dscoShipLateDate;                                             
+                 Exec Sql                                                                           
+                  Select cast(substr(:tim,1,10)||'-'||                                              
+                              substr(:tim,12,2)||'.'||                                              
+                              substr(:tim,15,2)||'.'||                                              
+                              substr(:tim,18,2)||'.'||                                              
+                              '000000' as timestamp),                                               
+                         cast(substr(:tim2,1,10)||'-'||                                             
+                              substr(:tim2,12,2)||'.'||                                             
+                              substr(:tim2,15,2)||'.'||                                             
+                              substr(:tim2,18,2)||'.'||                                             
+                              '000000' as timestamp)                                                
+                     into :tmstp, :tmstp2                                                           
+                  From sysibm.sysdummy1;                                                            
+            Exec Sql                                                                                
+             Select count(*)                                                                        
+               into :ii                                                                             
+             From edi850mst                                                                         
+             Where poNum = :beg03;                                                                  
+               If ii = *zero;                                                                       
+      //output edi 850 master                                                                       
+                 masterGuid = getGuid();                                                            
+                 Exec Sql                                                                           
+                  insert into edi850mst                                                             
+                  (pkey, cust#, cust, poNum, poDat, procsd, reproc)                                 
+                 values(:masterGuid,                                                                
+                                 53,                                                                
+                            'KOHLS',                                                                
+                             :beg03,                                                                
+                             :tmstp3,                                                               
+                                ' ',                                                                
+                                ' ');                                                               
+                   If sqlcod <> *zero;                                                              
+                     iv += 1;                                                                       
+                     errDs(iv).po = beg03;                                                          
+                     errDs(iv).sqlcod = sqlcod;                                                     
+                     errDs(iv).file = 'EDI850MST';                                                  
+                     Exec Sql                                                                       
+                      get diagnostics condition 1 :msg = MESSAGE_TEXT;                              
+                     ErrDs(iv).msg = msg;                                                           
+                   Endif;                                                                           
+                                                                                                    
+      //output edi 850 h1                                                                           
+                   clear guid;                                                                      
+                   guid = getGuid();                                                                
+                                                                                                    
+                   Exec Sql                                                                         
+                    insert into edi850h1                                                            
+                    values(:guid,                                                                   
+                           :masterGuid,                                                             
+                           :ordo.consumerOrderNumber,                                               
+                           :ordo.orderType,                                                         
+                           :ordo.receiptId,                                                         
+                           :ordo.shipWarehouseCode,                                                 
+                           :ordo.signatureRequiredFlag,                                             
+                           :ordo.shippingServiceLevelCode,                                          
+                           :shipping2.name,                                                         
+                           :shipping2.address1,                                                     
+                           :shipping2.address2,                                                     
+                           :shipping2.city,                                                         
+                           :shipping2.state,                                                        
+                           :shipping2.postal,                                                       
+                           :shipping2.email,                                                        
+                           :billTo2.name,                                                           
+                           :billTo2.address1,                                                       
+                           :billTo2.address2,                                                       
+                           :billTo2.city,                                                           
+                           :billTo2.state,                                                          
+                           :billTo2.postal,                                                         
+                           :billTo2.email,                                                          
+                           :taxes2.typeCode,                                                        
+                           :taxes2.percentage,                                                      
+                           :tmstp,                                                                  
+                           :tmstp2,                                                                 
+                     trim(:payments2.cardType)||' '||:payments2.cardLastFour);                      
+                     If sqlcod <> *zero;                                                            
+                       iv += 1;                                                                     
+                       errDs(iv).po = beg03;                                                        
+                       errDs(iv).sqlcod = sqlcod;                                                   
+                       errDs(iv).file = 'EDI850H1';                                                 
+                     Exec Sql                                                                       
+                      get diagnostics condition 1 :msg = MESSAGE_TEXT;                              
+                       errDs(iv).msg = msg;                                                         
+                     Endif;                                                                         
+                                                                                                    
+      //output edi 850 header 2                                                                     
+                for ii = 1 to %elem(ord.orders.coupons);                                            
+                  clear guid;                                                                       
+                  coupons2 = ord.orders(i).coupons(ii);                                             
+                  If coupons2.amount > *zero Or coupons2.percentage > *zero;                        
+                    guid = getGuid();                                                               
+                    Exec Sql                                                                        
+                     insert into edi850h2                                                           
+                      values(:guid, :masterGuid,                                                    
+                             :coupons2.amount,                                                      
+                             :coupons2.percentage);                                                 
+                     If sqlcod <> *zero;                                                            
+                       iv += 1;                                                                     
+                       errDs(iv).po = beg03;                                                        
+                       errDs(iv).sqlcod = sqlcod;                                                   
+                       errDs(iv).file = 'EDI850H2';                                                 
+                       Exec Sql                                                                     
+                        get diagnostics condition 1 :msg = MESSAGE_TEXT;                            
+                       errDs(iv).msg = msg;                                                         
+                     Endif;                                                                         
+                  Else;                                                                             
+                    leave;                                                                          
+                  Endif;                                                                            
+                endfor;                                                                             
+                                                                                                    
+      //output edi 850 detail 1                                                                     
+                 for ii = 1 to %elem(ord.orders.lineItems);                                         
+                    lineItems2 = ord.orders(i).lineItems(ii);                                       
+                    If lineItems2.quantity <> *zero;                                                
+                      clear guid;                                                                   
+                      guid = getGuid();                                                             
+                      Exec Sql                                                                      
+                       insert into edi850d1                                                         
+                        values(:guid, :masterGuid,                                                  
+                               :lineItems2.lineNumber,                                              
+                               :lineItems2.partnerSku,                                              
+                               :lineItems2.upc,                                                     
+                               :lineItems2.quantity,                                                
+                               :lineItems2.cancelledQuantity,                                       
+                               :lineItems2.expectedCost,                                            
+                               :lineItems2.consumerPrice,                                           
+                               :lineItems2.warehouseCode,                                           
+                               :lineItems2.color,                                                   
+                               :lineItems2.size,                                                    
+                               :lineItems2.title,                                                   
+                               :lineItems2.giftFlag,                                                
+                               :lineItems2.bogoFlag,                                                
+                               ' ', ' ',                                                            
+                               :lineItems2.giftMessage);                                            
+                        If sqlcod <> *zero;                                                         
+                          iv += 1;                                                                  
+                          errDs(iv).po = beg03;                                                     
+                          errDs(iv).sqlcod = sqlcod;                                                
+                          errDs(iv).file = 'EDI850D1';                                              
+                          Exec Sql                                                                  
+                           get diagnostics condition 1 :msg = MESSAGE_TEXT;                         
+                          errDs(iv).msg = msg;                                                      
+                        Endif;                                                                      
+                    Else;                                                                           
+                      leave;                                                                        
+                    Endif;                                                                          
+                 endfor;                                                                            
+               Endif;                                                                               
+       // api is fetching orders WAYYY late. AS - 03/26/2025                                      
+        //    leavesr;                                                                              
+        // put this back in! AS - 08/22/2025                                                        
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                iii = *zero;                                                                        
+                Exec Sql                                                                            
+                 Select count(*)                                                                    
+                   into :iii                                                                        
+                 From kdsh1850                                                                      
+                 Where beg03 = :beg03;                                                              
+               If iii = *zero;                                                                      
+      //output KDSH1850                                                                             
+         Exec Sql                                                                                   
+          insert into kdsh1850                                                                      
+           values('KOLDSCO','00','SA',:beg03,:beg05,                                                
+                  :ordo.consumerOrderNumber,'ZZ/DSCO','API',' ',                                    
+                  trim(:payments2.cardType)||' '||:payments2.cardLastFour,                          
+                  trim(:payments2.cardType)||' '||:payments2.cardLastFour,                          
+                  ' ', :shipping2.email, :beg05,                                                    
+                  :ordo.shippingServiceLevelCode,:billTo2.name,:shipping2.name,                     
+                  ' ', ' ',' ',:shipping2.address1,:billTo2.address1,                               
+                  :shipping2.address2,:billTo2.address2,                                            
+                  substr(:shipping2.city,1,20),                                                     
+                  substr(:billTo2.city,1,20),                                                       
+                  :shipping2.state, :billTo2.region,                                                
+                  :shipping2.postal,:billTo2.postal,' ', ' ',' ',                                   
+                  substr(char(current_timestamp),1,10),                                             
+                  substr(char(current_timestamp),12,8),:beg05,0);                                   
+                        If sqlcod <> *zero;                                                         
+                          iv += 1;                                                                  
+                          errDs(iv).po = beg03;                                                     
+                          errDs(iv).sqlcod = sqlcod;                                                
+                          errDs(iv).file = 'KDSH1850';                                              
+                          Exec Sql                                                                  
+                           get diagnostics condition 1 :msg = MESSAGE_TEXT;                         
+                          errDs(iv).msg = msg;                                                      
+                        Endif;                                                                      
+                                                                                                    
+      //output KDSH3850                                                                             
+         Exec Sql                                                                                   
+          insert into kdsh3850                                                                      
+           values(:beg03, :beg05, 'T', 0,                                                           
+                  trim(:taxes2.typeCode)||' = '||                                                   
+                  trim(char(:taxes2.percentage))||'%');                                             
+                                                                                                    
+                for ii = 1 to %elem(ord.orders.coupons);                                            
+                  coupons2 = ord.orders(i).coupons(ii);                                             
+                  If coupons2.amount > *zero Or coupons2.percentage > *zero;                        
+                    Exec Sql                                                                        
+                     insert into kdsh3850                                                           
+                      values(:beg03, :beg05, 'PD',                                                  
+                             :coupons2.amount,                                                      
+                             '% Transaction Discount '||                                            
+                             trim(char((:coupons2.percentage * 100)))||'%');                        
+                        If sqlcod <> *zero;                                                         
+                          iv += 1;                                                                  
+                          errDs(iv).po = beg03;                                                     
+                          errDs(iv).sqlcod = sqlcod;                                                
+                          errDs(iv).file = 'KDSH3850';                                              
+                          Exec Sql                                                                  
+                           get diagnostics condition 1 :msg = MESSAGE_TEXT;                         
+                          errDs(iv).msg = msg;                                                      
+                        Endif;                                                                      
+                  Else;                                                                             
+                    leave;                                                                          
+                  Endif;                                                                            
+                endfor;                                                                             
+      //output KDSD1850                                                                             
+                 for ii = 1 to %elem(ord.orders.lineItems);                                         
+                    lineItems2 = ord.orders(i).lineItems(ii);                                       
+                    If lineItems2.quantity <> *zero;                                                
+                      Exec Sql                                                                      
+                       insert into kdsd1850                                                         
+                        values('KOLDSCO',:beg03,:beg05,                                             
+                         digits(dec(:lineItems2.lineNumber,2,0)),                                   
+                         :lineItems2.quantity,'EA',:lineItems2.expectedCost,                        
+                         'TE',:lineItems2.partnerSku,:lineItems2.upc,                               
+                         :lineItems2.title,:lineItems2.color,                                       
+                         :lineItems2.size,substr(:lineItems2.receiptId,1,30),                       
+                         :lineItems2.receiptId,0,' ',' ',0,                                         
+                         dec(substr(:ordo.dscoShipLateDate,1,4)||                                   
+                             substr(:ordo.dscoShipLateDate,6,2)||                                   
+                             substr(:ordo.dscoShipLateDate,9,2),8,0),                               
+                         :ordo.shippingServiceLevelCode, ' ',                                       
+                         :lineItems2.consumerPrice, 0,0,0,0,0,                                      
+                         :taxes2.typeCode,' ',0);                                                   
+                        If sqlcod <> *zero;                                                         
+                          iv += 1;                                                                  
+                          errDs(iv).po = beg03;                                                     
+                          errDs(iv).sqlcod = sqlcod;                                                
+                          errDs(iv).file = 'KDSD1850';                                              
+                          Exec Sql                                                                  
+                           get diagnostics condition 1 :msg = MESSAGE_TEXT;                         
+                          errDs(iv).msg = msg;                                                      
+                        Endif;                                                                      
+      //output KDSD2850                                                                             
+                                   //line unit price (EVERY TIME!!!!)                               
+                             Exec Sql                                                               
+                              insert into kdsd2850                                                  
+                               values('KOLDSCO', :beg03, :beg05,                                    
+                                      digits(dec(:lineItems2.lineNumber,2,0)),                      
+                                     'N', 'E067', ' ',:lineItems2.expectedCost);                    
+                          If lineItems2.bogoFlag = *on;                                             
+                                   //bogo!                                                          
+                             Exec Sql                                                               
+                              insert into kdsd2850                                                  
+                                values('KOLDSCO', :beg03, :beg05,                                   
+                                      digits(dec(:lineItems2.lineNumber,2,0)),                      
+                                      'N', 'F050','BUY ONE, GET ONE',0);                            
+                          Endif;                                                                    
+                          If lineItems2.giftFlag = *on;                                             
+                                   //gift!                                                          
+                             Exec Sql                                                               
+                              insert into kdsd2850                                                  
+                                values('KOLDSCO', :beg03, :beg05,                                   
+                                      digits(dec(:lineItems2.lineNumber,2,0)),                      
+                                      'N', 'H151',:lineItems2.giftMessage,0);                       
+                          Endif;                                                                    
+                    Else;                                                                           
+                      leave;                                                                        
+                    Endif;                                                                          
+                 endfor;                                                                            
+                Endif;                                                                              
+         endfor;                                                                                    
+       Endsr;                                                                                       
+     *****************************************************                                          
+       /copy edilib/qprcsrc,rithum_h                                                                

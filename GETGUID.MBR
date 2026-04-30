@@ -1,0 +1,82 @@
+     H NOMAIN EXPROPTS(*RESDECPOS)                                                                                            
+      * PROGRAM - GETGUID                                                                                                     
+      * PURPOSE - Return a unique ID                                                                                          
+      * WRITTEN - 10/31/17                                                                                                    
+      * AUTHOR  - Jamie Flanary                                                                                               
+                                                                                                                              
+      // -------------------- Data Structures --------------------                                                            
+     d genuuid_ds      ds                  qualified                                                                          
+     d   BytesProv                   10i 0 inz(%size(genuuid_ds))                                                             
+     d   BytesAvail                  10i 0 inz(0)                                                                             
+     d   Reserved                     8a   inz(*allX'00')                                                                     
+     d   RtnUUID                     36a                                                                                      
+                                                                                                                              
+     d                 ds                                                                                                     
+     d guidstd                       36a                                                                                      
+     d  Guidpart1                     8a   Overlay(guidstd)                                                                   
+     d  dash1                         1a   Inz('-') Overlay(guidstd:9)                                                        
+     d  Guidpart2                     4a   Overlay(guidstd:10)                                                                
+     d  dash2                         1a   Inz('-') Overlay(guidstd:14)                                                       
+     d  Guidpart3                     4a   Overlay(guidstd:15)                                                                
+     d  dash3                         1a   Inz('-') Overlay(guidstd:19)                                                       
+     d  Guidpart4                     4a   Overlay(guidstd:20)                                                                
+     d  dash4                         1a   Inz('-') Overlay(guidstd:24)                                                       
+     d  Guidpart5                    12a   Overlay(guidstd:25)                                                                
+      // ------------------ Standalone Variables -----------------                                                            
+     d guidcnt         s              5i 0                                                                                    
+     d systemname      s              8A                                                                                      
+     d sqlstmt         S           1000A   Varying                                                                            
+     d workguid        s             36A                                                                                      
+     d workguidfield   s             10A                                                                                      
+     d worksystemfield...                                                                                                     
+     d                 s             10A                                                                                      
+     d worktable       s             10A                                                                                      
+     d Up              c                   CONST('ABCDEFGHIJKLMNOPQRSTUVWXYZ')                                                
+     d Lo              c                   CONST('abcdefghijklmnopqrstuvwxyz')                                                
+                                                                                                                              
+      // ---------------------- Constants ------------------------                                                            
+     d Q               C                   Const('''')                                                                        
+     d standardlen     C                   Const(36)                                                                          
+                                                                                                                              
+      // ---------------------- Indicators -----------------------                                                            
+                                                                                                                              
+      //==============================================================*                                                       
+      //   PROTOTYPES                                                 *                                                       
+      //--------------------------------------------------------------*                                                       
+                                                                                                                              
+      /copy qprcsrc,GETGUIDCP                                                                                                 
+                                                                                                                              
+     d Chr2Hex         pr                  ExtProc('cvthc')                                                                   
+     d  Tgt                       65534A   Options(*VarSize)                                                                  
+     d  Src                       32767A   Options(*VarSize)                                                                  
+     d  TgtLen                       10i 0 Value                                                                              
+                                                                                                                              
+     d GenUUID         pr                  extproc('_GENUUID')                                                                
+     d   genuuidds                         like(genuuid_ds)                                                                   
+                                                                                                                              
+      //==============================================================*                                                       
+      //              PROCEDURE INTERFACE                             *                                                       
+      //--------------------------------------------------------------*                                                       
+                                                                                                                              
+     pGetGUID          B                   Export                                                                             
+     dGetGUID          PI            36A                                                                                      
+                                                                                                                              
+       /free                                                                                                                  
+                GenUUID(genuuid_ds);                                                                                          
+                Chr2hex (workGUID: genuuid_ds.RtnUUID: 36) ;                                                                  
+                // from '94E0E001EF8319CAB8640004AC1436034040'                                                                
+                // to '94E0E001-EF83-19CA-B864-0004AC143603'                                                                  
+                Guidpart1 = %subst(workGUID:1:8);                                                                             
+                Guidpart2 = %subst(workGUID:9:4);                                                                             
+                Guidpart3 = %subst(workGUID:13:4);                                                                            
+                Guidpart4 = %subst(workGUID:17:4);                                                                            
+                Guidpart5 = %subst(workGUID:21:12);                                                                           
+                                                                                                                              
+                WorkGUID  = %xlate(up:lo:guidstd);                                                                            
+                                                                                                                              
+                Return workguid;                                                                                              
+                                                                                                                              
+       /end-free                                                                                                              
+                                                                                                                              
+     PGetGuid          e                                                                                                      
+                                                                                                                              

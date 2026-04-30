@@ -1,0 +1,233 @@
+       /IF NOT DEFINED(rithum_HEADER)                                                               
+       /DEFINE rithum_HEADER                                                                        
+           /include libhttp2/qrpglesrc,ifsio_h                                                      
+           /include libhttp2/qrpglesrc,httpapi_h                                                    
+      *=Files=============================================                                          
+         dcl-f rtm_tkn usage(*input:*update) keyed usropn;                                          
+         dcl-f utilCtl usage(*input) keyed;                                                         
+      *=Standalone-Variables==============================                                          
+         dcl-c host const('https://api.dsco.io/api/v3');                                            
+         dcl-s URL varchar(32767);                                                                  
+         dcl-s @rc int(10);                                                                         
+         dcl-s response varchar(16000000);                                                          
+         dcl-s SndStr varchar(16000000);                                                            
+         dcl-c new const(x'0D25');                                                                  
+         dcl-s id varchar(50);                                                                      
+         dcl-s secret varchar(50);                                                                  
+         dcl-ds tkn_resp qualified;                                                                 
+           access_token char(5000);                                                                 
+           expires_in zoned(6:0);                                                                   
+           token_type char(15);                                                                     
+         end-ds;                                                                                    
+         dcl-ds dta;                                                                                
+           kdsapi char(10) pos(1) dtaara;                                                           
+           kdsapi# zoned(10:0) pos(1);                                                              
+         end-ds;                                                                                    
+         dcl-s xx int(3);                                                                           
+         dcl-s rid zoned(10:0) dim(100);                                                            
+         dcl-c dir const('/rtm/payloads/');                                                         
+         dcl-s cmd varchar(512);                                                                    
+         dcl-c sEP const('/invoice');                                                               
+         dcl-c bEP const('/invoice/batch/small');                                                   
+         dcl-c tEP const('/invoice/log');                                                           
+         dcl-c iEP const('/inventory/batch/small');                                                 
+         dcl-c lEP const('/inventory/log');                                                         
+         dcl-s tkn varchar(5000);                                                                   
+      *=Prototypes========================================                                          
+        dcl-pr Sleep int(10) ExtProc('sleep');                                                      
+          *n uns(10) value;                                                                         
+        end-pr;                                                                                     
+        dcl-pr QcmdExc extpgm('QCMDEXC');                                                           
+           *n char(512) const options(*varsize);                                                    
+           *n packed(15:5) const;                                                                   
+        end-pr;                                                                                     
+      *=Data-Structures===================================                                          
+         dcl-ds log qualified;                                                                      
+          scrollId char(50);                                                                        
+          dcl-ds logs dim(100);                                                                     
+            dcl-ds payload;                                                                         
+              invoiceId char(25);                                                                   
+              poNumber char(22);                                                                    
+            end-ds;                                                                                 
+            dateProcessed char(30);                                                                 
+            status char(25);                                                                        
+            requestMethod char(10);                                                                 
+            requestId char(25);                                                                     
+            processId char(25);                                                                     
+            dcl-ds results dim(25);                                                                 
+              code char(25);                                                                        
+              severity char(25);                                                                    
+              description char(75) dim(25);                                                         
+            end-ds;                                                                                 
+          end-ds;                                                                                   
+        end-ds;                                                                                     
+                                                                                                    
+        dcl-ds invv qualified;                                                                      
+           eventDate char(30);                                                                      
+           requestId char(40);                                                                      
+           status char(25);                                                                         
+           dcl-ds messages dim(1000);                                                               
+             code char(25);                                                                         
+             severity char(10);                                                                     
+             description char(100) dim(50);                                                         
+           end-ds;                                                                                  
+        end-ds;                                                                                     
+                                                                                                    
+        dcl-ds Pgm_stat PSDS;                                                                       
+              @mod char(10) Pos(1);                                                                 
+              @lib char(10) Pos(81);                                                                
+              @job char(10) Pos(244);                                                               
+              @user char(10) Pos(254);                                                              
+              @nbr  char(6) Pos(264);                                                               
+        end-ds;                                                                                     
+      *=Notes=============================================                                          
+      *                                                                                             
+       /EOF                                                                                         
+       /ENDIF                                                                                       
+     *********************************************************************                          
+       /IF NOT DEFINED(rithum_FOOTER)                                                               
+         /DEFINE rithum_FOOTER                                                                      
+     *********************************************************************                          
+     **                                                                                             
+     **                                                                                             
+     *********************************************************************                          
+        dcl-proc get_token;                                                                         
+         dcl-pi *n varchar(5000);                                                                   
+           cid varchar(50) const options(*trim);                                                    
+           csr varchar(50) const options(*trim);                                                    
+           tim zoned(6:0);                                                                          
+         end-pi;                                                                                    
+                                                                                                    
+         dcl-s sec int(10);                                                                         
+       //     open rtm_tkn;                                                                         
+       //       chain ('RITHUM1':'rtm_tkn1.txt') rtm_tkn;                                           
+       //         If %found(rtm_tkn);                                                               
+       //           sec = %diff(%timestamp:tkntmstp:*seconds);                                      
+       //           If sec > tkncnt;                                                                
+       //             //Request new                                                                 
+       //           Else;                                                                           
+       //             //get stored                                                                  
+       //           Endif;                                                                          
+       //         Endif;                                                                            
+       //     close rtm_tkn;                                                                        
+                 id = http_urlEncode(%trim(cid));                                                   
+                 secret = http_urlEncode(%trim(csr));                                               
+                 http_xproc(HTTP_POINT_ADDL_HEADER: %paddr(Auth_header));                           
+                    URL = host + '/oauth2/token';                                                   
+                 SndStr = 'grant_type=client_credentials&' +                                        
+                          'client_id=' + %trim(id) + '&' +                                          
+                          'client_secret=' + %trim(secret);                                         
+                                                                                                    
+            @rc = http_req('POST':                                                                  
+                             URL:                                                                   
+                           *omit:                                                                   
+                       response:                                                                    
+                           *omit:                                                                   
+                           SndStr:                                                                  
+                          'application/x-www-form-urlencoded');                                     
+          Data-Into tkn_resp %DATA(response:                                                        
+           'allowmissing=yes allowextra=yes case=convert countprefix=num_')                         
+                       %PARSER('YAJLINTO');                                                         
+                //    tim = tkn_resp.expires_in;                                                    
+               return tkn_resp.access_token;                                                        
+          http_debug(*off);                                                                         
+        end-proc;                                                                                   
+     *********************************************************************                          
+        dcl-proc Auth_Header;                                                                       
+         dcl-pi *n;                                                                                 
+           HeaderData varchar(1024);                                                                
+         End-Pi;                                                                                    
+            dcl-c new const(x'0D25');                                                               
+                                                                                                    
+       HeaderData =  'Host: api.dsco.io' + new +                                                    
+         'Content-Type: application/x-www-form-urlencoded' + new;                                   
+       end-proc;                                                                                    
+     *********************************************************************                          
+       dcl-proc tkn_hdr;                                                                            
+         dcl-pi *n;                                                                                 
+           //tkn varchar(5000);                                                                     
+           tknData varchar(3500);                                                                   
+         End-Pi;                                                                                    
+            dcl-c new const(x'0D25');                                                               
+                                                                                                    
+            tknData = 'Authorization: bearer ' + %trim(tkn) + new;                                  
+       end-proc;                                                                                    
+     *********************************************************************                          
+       dcl-proc get_ids;                                                                            
+         dcl-pi *n;                                                                                 
+           ids int(3);                                                                              
+         end-pi;                                                                                    
+                                                                                                    
+         clear rid;                                                                                 
+         for xx = 1 to ids;                                                                         
+           In *lock kdsapi;                                                                         
+             kdsapi# += 1;                                                                          
+             rid(xx) = kdsapi#;                                                                     
+           Out kdsapi;                                                                              
+         endfor;                                                                                    
+       end-proc;                                                                                    
+     *********************************************************************                          
+       // dcl-proc err;                                                                             
+       //   dcl-pi *n int(10) end-pi;                                                               
+       //  /free                                                                                    
+       //  Exec Sql                                                                                 
+       //   with temp as (                                                                          
+       //    Select count(*) as tot                                                                 
+       //    From kds011f, kds010f                                                                  
+       //    Where k10rqstid = k11rqstid                                                            
+       //    And k11stat = ' '                                                                      
+       //    And k10tran <> 99)                                                                     
+       //    Select count(k10tran) + (Select tot from temp)                                         
+       //      into :@rc                                                                            
+       //    From kds010f                                                                           
+       //    Where k10tran = 99;                                                                    
+       //  return @rc;                                                                              
+       //  /end-free                                                                                
+       // end-proc;                                                                                 
+     *********************************************************************                          
+       //dcl-proc rqst;                                                                             
+       //  dcl-pi *n int(10);                                                                       
+       //    method varchar(10) const;                                                              
+       //  //  endpoint varchar(32767) const;                                                       
+       //    ifsResp varchar(5000) const;                                                           
+       //   // resp varchar(16000000);                                                              
+       //    ifsSend varchar(5000) const;                                                           
+       // //   send varchar(16000000) const;                                                        
+       //    content varchar(16384) const;                                                          
+       //  end-Pi;                                                                                  
+       //    return http_req(method:                                                                
+       //                       URL:                                                                
+       //                   ifsResp:                                                                
+       //                  response:                                                                
+       //                   ifsSend:                                                                
+       //                   sendStr:                                                                
+       //                  content);                                                                
+       //end-proc;                                                                                  
+     *********************************************************************                          
+     *********************************************************************                          
+      /EOF                                                                                          
+      /ENDIF                                                                                        
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
